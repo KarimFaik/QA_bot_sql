@@ -6,7 +6,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 from question_handler import find_answer_in_db, lemmatize_text
 from feedback_handler import handle_feedback, find_successful_answer
 from synonyms import synonyms
-from transformer_handler import generate_answer_with_transformer
+#from transformer_handler import generate_answer_with_transformer
 
 # Настройка логгера
 logging.basicConfig( 
@@ -86,20 +86,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             log_failure(question, flags)
             await update.message.reply_text("Извините, я не могу найти ответ на ваш вопрос.\nОбратитесь к salpagarov-si@rudn.ru")
             context.user_data["awaiting_feedback"] = False
-            '''context_for_transformer = "Ваш контекст для трансформера"
-            transformer_answer = generate_answer_with_transformer(question, context_for_transformer)
-            
-            if transformer_answer:
-                context.user_data["current_question"] = question
-                context.user_data["current_answer"] = transformer_answer
-                await update.message.reply_text(transformer_answer)
-                await update.message.reply_text("Ответил ли я на ваш вопрос? (Да/Нет)")
-                context.user_data["awaiting_feedback"] = True
-            else:
-                log_failure(question, flags)
-                await update.message.reply_text("Извините, я не могу найти ответ на ваш вопрос.\nОбратитесь к salpagarov-si@rudn.ru")
-                context.user_data["awaiting_feedback"] = False'''
-            
+
+
 # Обработчик ошибок
 async def error(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.error(f"Ошибка в обновлении {update}: {context.error}")

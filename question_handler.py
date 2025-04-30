@@ -4,81 +4,93 @@ import re
 from pymorphy3 import MorphAnalyzer
 from synonyms import synonyms
 
+
 # Инициализация морфологического анализатора
 morph = MorphAnalyzer()
 
-# Путь к базе данных (в папке Data)
+# Путь к базе данных
 db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Data", "data.db")
 
-# Лемматизация текста
+
 def lemmatize_text(text):
+    """
+    Лемматизация текста — приведение слов к нормальной форме.
+    """
     words = re.findall(r'\w+', text.lower())
     return ' '.join([morph.parse(word)[0].normal_form for word in words])
 
-# Поиск ключевых слов в вопросе
+
 def find_keywords_in_question(question):
+    """
+    Поиск ключевых слов в вопросе, учитывая синонимы.
+    """
     lemmatized_question = lemmatize_text(question)
     keywords = []
 
-    # Ищем основное ключевое слово и второе ключевое слово
     for primary_keyword, synonym_list in synonyms.items():
-        # Проверяем основное ключевое слово
         if lemmatize_text(primary_keyword) in lemmatized_question:
             keywords.append(primary_keyword)
-        
-        # Проверяем синонимы основного ключевого слова
+
         for synonym in synonym_list:
             if lemmatize_text(synonym) in lemmatized_question:
                 keywords.append(primary_keyword)
-                break  # Прерываем цикл, если синоним найден
+                break  # Прерываем при первом совпадении
 
-    return keywords
+    return list(set(keywords))  # Удаляем дубликаты
 
-# Поиск ответа в базе данных
+
 def find_answer_in_db(question):
+    """
+    Основная функция поиска ответа в базе данных.
+    """
     if not os.path.exists(db_path):
         return None, ["База данных не найдена."]
 
     lemmatized_question = lemmatize_text(question)
-    flags = []
+    print(f"[DEBUG] Лемматизированный вопрос: {lemmatized_question}")
 
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
 
     keywords = find_keywords_in_question(question)
+    answers = []
+    flags = []
+
     if not keywords:
-        flags.append("Ключевые слова не найдены в вопросе.")
-        conn.close()
+        flags.append("Не найдено ключевых слов.")
         return None, flags
 
-    answers = []
     for keyword in keywords:
+        # Гибкий запрос через LIKE
         cursor.execute('''
             SELECT answer, secondary_keyword FROM data
-            WHERE primary_keyword = ?
-        ''', (keyword,))
+            WHERE primary_keyword LIKE ?
+               OR secondary_keyword LIKE ?
+        ''', (f"%{keyword}%", f"%{keyword}%"))
         results = cursor.fetchall()
 
         if results:
-            flags.append(f"Найдены ответы по ключевому слову: {keyword}")
-            # Фильтруем некорректные ответы (например, односимвольные)
             valid_results = [(ans, sec) for ans, sec in results if len(ans.strip()) > 1]
             answers.extend(valid_results)
+            flags.append(f"Найдены ответы по ключевому слову: {keyword}")
 
     conn.close()
 
     if not answers:
-        flags.append("Ответы не найдены или отфильтрованы как некорректные.")
+        flags.append("Ответов не найдено или они были отфильтрованы.")
         return None, flags
 
-    if len(answers) > 1:
-        for answer, secondary_keyword in answers:
-            if secondary_keyword and lemmatize_text(secondary_keyword) in lemmatized_question:
-                flags.append(f"Найдено вторичное ключевое слово: {secondary_keyword}")
-                return [(answer, secondary_keyword)], flags
+    # Фильтруем ответы по вторичному ключевому слову
+    best_answers = []
+    for answer, secondary in answers:
+        if secondary and lemmatize_text(secondary) in lemmatized_question:
+            best_answers.append((answer, secondary))
+            flags.append(f"Выбран ответ по вторичному ключевому слову: {secondary}")
+            break  # Берём первый подходящий ответ
 
-        flags.append("Вторичное ключевое слово не найдено, возвращаем все ответы.")
-        return answers, flags
-    else:
-        flags.append("Найдено одно совпадение, возвращаем ответ.")
-        return [(answers[0][0], answers[0][1])], flags
+    if best_answers:
+        return best_answers, flags
+
+    # Если вторичных ключевых слов нет — возвращаем первый ответ
+    flags.append("Вторичные ключевые слова не соответствуют. Возвращаем первый ответ.")
+    return [answers[0]], flags
