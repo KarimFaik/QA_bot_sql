@@ -4,7 +4,7 @@ import os
 # Загрузка текста из файла
 def load_text():
     # Указываем путь к файлу напрямую
-    data_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Data.txt")
+    data_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),"Data", "Data.txt")
     
     try:
         with open(data_path, "r", encoding="utf-8") as file:
